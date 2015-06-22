@@ -613,12 +613,15 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
 
   switch (transfer->status) {
   case LIBUSB_TRANSFER_COMPLETED:
-    if (transfer->num_iso_packets == 0) {
+
+    if (transfer->num_iso_packets == 0) {     
+    UVC_DEBUG("LIBUSB_TRANSFER_COMPLETED bulk"); 
       /* This is a bulk mode transfer, so it just has one payload transfer */
       _uvc_process_payload(strmh, transfer->buffer, transfer->actual_length);
     } else {
       /* This is an isochronous mode transfer, so each packet has a payload transfer */
       int packet_id;
+      UVC_DEBUG("LIBUSB_TRANSFER_COMPLETED iso %d",transfer->num_iso_packets);
 
       for (packet_id = 0; packet_id < transfer->num_iso_packets; ++packet_id) {
         uint8_t *pktbuf;
@@ -642,7 +645,7 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
   case LIBUSB_TRANSFER_ERROR:
   case LIBUSB_TRANSFER_NO_DEVICE: {
     int i;
-    UVC_DEBUG("not retrying transfer, status = %d", transfer->status);
+    UVC_DEBUG("not retrying transfer, status = %d (1=error,2=timeout,3=cancelled,4=stall,5=nodevice)", transfer->status);
     pthread_mutex_lock(&strmh->cb_mutex);
 
     /* Mark transfer as deleted. */
@@ -669,12 +672,23 @@ void LIBUSB_CALL _uvc_stream_callback(struct libusb_transfer *transfer) {
   case LIBUSB_TRANSFER_TIMED_OUT:
   case LIBUSB_TRANSFER_STALL:
   case LIBUSB_TRANSFER_OVERFLOW:
-    UVC_DEBUG("retrying transfer, status = %d", transfer->status);
+    UVC_DEBUG("retrying transfer, status = %d (1=error,2=timeout,3=cancelled,4=stall,5=nodevice)", transfer->status);
     break;
+    default:
+        UVC_DEBUG("transfer callback unknown!!! %d",transfer->status); 
+        break;
+
   }
   
   if ( strmh->running && resubmit )
-    libusb_submit_transfer(transfer);
+  {
+    int ret;
+    UVC_DEBUG("resubmit");
+    ret = libusb_submit_transfer(transfer);
+    if (ret != UVC_SUCCESS) {
+      UVC_DEBUG("libusb_submit_transfer resubmit failed");
+    }
+  }
 }
 
 /** Begin streaming video from the camera into the callback function.
@@ -964,6 +978,7 @@ uvc_error_t uvc_stream_start(
       libusb_set_iso_packet_lengths(transfer, endpoint_bytes_per_packet);
     }
   } else {
+    UVC_DEBUG("starting stream with %d buffers, max size %d",LIBUVC_NUM_TRANSFER_BUFS,strmh->cur_ctrl.dwMaxPayloadTransferSize);
     for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
         ++transfer_id) {
       transfer = libusb_alloc_transfer(0);

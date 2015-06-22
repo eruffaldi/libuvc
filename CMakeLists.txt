@@ -82,8 +82,15 @@ target_link_libraries(uvc ${LIBUSB_LIBRARY_NAMES})
 add_executable(example src/example.c)
 target_link_libraries(example uvc ${LIBUSB_LIBRARY_NAMES} opencv_highgui
   opencv_imgproc
-  opencv_core	)
+  opencv_core	
+  pthread)
 
+
+add_executable(examplers src/examplers.c)
+target_link_libraries(examplers uvc ${LIBUSB_LIBRARY_NAMES} opencv_highgui
+  opencv_imgproc
+  opencv_core	
+  pthread)
 install(TARGETS uvc
   EXPORT libuvcTargets
   LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
