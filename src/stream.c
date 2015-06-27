@@ -895,7 +895,7 @@ uvc_error_t uvc_stream_start(
 
   /* A VS interface uses isochronous transfers iff it has multiple altsettings.
    * (UVC 1.5: 2.4.3. VideoStreaming Interface) */
-  isochronous = interface->num_altsetting > 1;
+  isochronous = interface->num_altsetting > 0;
 
   if (isochronous) {
     /* For isochronous streaming, we choose an appropriate altsetting for the endpoint
