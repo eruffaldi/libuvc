@@ -203,9 +203,8 @@ typedef struct uvc_device_info {
   uvc_control_interface_t ctrl_if;
   /** VideoStreaming interfaces on the device */
   uvc_streaming_interface_t *stream_ifs;
+    int camera_number;
 
-  /* Store the interface for multiple UVCs on a single VID/PID device (Intel RealSense, VF200, e.g) */
-  int camera_number;
 } uvc_device_info_t;
 
 /*
@@ -216,7 +215,7 @@ typedef struct uvc_device_info {
   We could/should change this to allow reduce it to, say, 5 by default
   and then allow the user to change the number of buffers as required.
  */
-#define LIBUVC_NUM_TRANSFER_BUFS 5
+#define LIBUVC_NUM_TRANSFER_BUFS 100
 
 #define LIBUVC_XFER_BUF_SIZE	( 16 * 1024 * 1024 )
 

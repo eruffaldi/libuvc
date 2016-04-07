@@ -43,7 +43,6 @@ int uvc_already_open(uvc_context_t *ctx, struct libusb_device *usb_dev);
 void uvc_free_devh(uvc_device_handle_t *devh);
 
 uvc_error_t uvc_get_device_info(uvc_device_t *dev, uvc_device_info_t **info);
-uvc_error_t uvc_get_device_info2(uvc_device_t *dev, uvc_device_info_t **info, int camera_number);
 void uvc_free_device_info(uvc_device_info_t *info);
 
 uvc_error_t uvc_scan_control(uvc_device_t *dev, uvc_device_info_t *info);
@@ -264,20 +263,104 @@ uint8_t uvc_get_device_address(uvc_device_t *dev) {
   return libusb_get_device_address(dev->usb_dev);
 }
 
-
-/** @brief Open a UVC device, defaulting to the first interface found
+/** @brief Open a UVC device
  * @ingroup device
  *
  * @param dev Device to open
  * @param[out] devh Handle on opened device
  * @return Error opening device or SUCCESS
  */
-
 uvc_error_t uvc_open(
     uvc_device_t *dev,
     uvc_device_handle_t **devh) {
-  return uvc_open2(dev, devh, 0);
+  uvc_error_t ret;
+  struct libusb_device_handle *usb_devh;
+  uvc_device_handle_t *internal_devh;
+  struct libusb_device_descriptor desc;
+
+  UVC_ENTER();
+
+  ret = libusb_open(dev->usb_dev, &usb_devh);
+  UVC_DEBUG("libusb_open() = %d", ret);
+
+  if (ret != UVC_SUCCESS) {
+    UVC_EXIT(ret);
+    return ret;
+  }
+
+  uvc_ref_device(dev);
+
+  internal_devh = calloc(1, sizeof(*internal_devh));
+  internal_devh->dev = dev;
+  internal_devh->usb_devh = usb_devh;
+
+  ret = uvc_get_device_info(dev, &(internal_devh->info));
+
+  if (ret != UVC_SUCCESS)
+    goto fail;
+
+  UVC_DEBUG("claiming control interface %d", internal_devh->info->ctrl_if.bInterfaceNumber);
+  ret = uvc_claim_if(internal_devh, internal_devh->info->ctrl_if.bInterfaceNumber);
+  if (ret != UVC_SUCCESS)
+    goto fail;
+
+  libusb_get_device_descriptor(dev->usb_dev, &desc);
+  internal_devh->is_isight = (desc.idVendor == 0x05ac && desc.idProduct == 0x8501);
+
+  if (internal_devh->info->ctrl_if.bEndpointAddress) {
+    internal_devh->status_xfer = libusb_alloc_transfer(0);
+    if (!internal_devh->status_xfer) {
+      ret = UVC_ERROR_NO_MEM;
+      goto fail;
+    }
+
+    libusb_fill_interrupt_transfer(internal_devh->status_xfer,
+                                   usb_devh,
+                                   internal_devh->info->ctrl_if.bEndpointAddress,
+                                   internal_devh->status_buf,
+                                   sizeof(internal_devh->status_buf),
+                                   _uvc_status_callback,
+                                   internal_devh,
+                                   0);
+    ret = libusb_submit_transfer(internal_devh->status_xfer);
+    UVC_DEBUG("libusb_submit_transfer() = %d", ret);
+
+    if (ret) {
+      fprintf(stderr,
+              "uvc: device has a status interrupt endpoint, but unable to read from it\n");
+      goto fail;
+    }
+  }
+
+  if (dev->ctx->own_usb_ctx && dev->ctx->open_devices == NULL) {
+    /* Since this is our first device, we need to spawn the event handler thread */
+    uvc_start_handler_thread(dev->ctx);
+  }
+
+  DL_APPEND(dev->ctx->open_devices, internal_devh);
+  *devh = internal_devh;
+
+  UVC_EXIT(ret);
+
+  return ret;
+
+ fail:
+  if ( internal_devh->info ) {
+    uvc_release_if(internal_devh, internal_devh->info->ctrl_if.bInterfaceNumber);
+  }
+  libusb_close(usb_devh);
+  uvc_unref_device(dev);
+  uvc_free_devh(internal_devh);
+
+  UVC_EXIT(ret);
+
+  return ret;
 }
+
+
+uvc_error_t uvc_get_device_info2(uvc_device_t *dev,
+        uvc_device_info_t **info,
+        int camera_number);
 
 /** @brief Open a UVC device, specifying the camera number, zero-based
  * @ingroup device
@@ -378,33 +461,15 @@ uvc_error_t uvc_open2(
 
 /**
  * @internal
- * @brief Parses the complete device descriptor for a device. Defaults to using the first camera interface found on a device.
- * @ingroup device
- * @note Free *info with uvc_free_device_info when you're done
- *
- * @param dev Device to parse descriptor for
- * @param info Where to store a pointer to the new info struct
- * 
- */
-uvc_error_t uvc_get_device_info(uvc_device_t *dev,
-				uvc_device_info_t **info) {
-  return uvc_get_device_info2(dev, info, 0);
-}
-
-/**
- * @internal
  * @brief Parses the complete device descriptor for a device
  * @ingroup device
  * @note Free *info with uvc_free_device_info when you're done
  *
  * @param dev Device to parse descriptor for
  * @param info Where to store a pointer to the new info struct
- * @param camera_number Index of the camera to open, 0-based
  */
-
-uvc_error_t uvc_get_device_info2(uvc_device_t *dev,
-				uvc_device_info_t **info,
-				int camera_number) {
+uvc_error_t uvc_get_device_info(uvc_device_t *dev,
+				uvc_device_info_t **info) {
   uvc_error_t ret;
   uvc_device_info_t *internal_info;
 
@@ -419,6 +484,52 @@ uvc_error_t uvc_get_device_info2(uvc_device_t *dev,
   if (libusb_get_config_descriptor(dev->usb_dev,
 				   0,
 				   &(internal_info->config)) != 0) {
+    free(internal_info);
+    UVC_EXIT(UVC_ERROR_IO);
+    return UVC_ERROR_IO;
+  }
+
+  ret = uvc_scan_control(dev, internal_info);
+  if (ret != UVC_SUCCESS) {
+    uvc_free_device_info(internal_info);
+    UVC_EXIT(ret);
+    return ret;
+  }
+
+  *info = internal_info;
+
+  UVC_EXIT(ret);
+  return ret;
+}
+
+/**
+ * @internal
+ * @brief Parses the complete device descriptor for a device
+ * @ingroup device
+ * @note Free *info with uvc_free_device_info when you're done
+ *
+ * @param dev Device to parse descriptor for
+ * @param info Where to store a pointer to the new info struct
+ * @param camera_number Index of the camera to open, 0-based
+ */
+
+uvc_error_t uvc_get_device_info2(uvc_device_t *dev,
+        uvc_device_info_t **info,
+        int camera_number) {
+  uvc_error_t ret;
+  uvc_device_info_t *internal_info;
+
+  UVC_ENTER();
+
+  internal_info = calloc(1, sizeof(*internal_info));
+  if (!internal_info) {
+    UVC_EXIT(UVC_ERROR_NO_MEM);
+    return UVC_ERROR_NO_MEM;
+  }
+
+  if (libusb_get_config_descriptor(dev->usb_dev,
+           0,
+           &(internal_info->config)) != 0) {
     free(internal_info);
     UVC_EXIT(UVC_ERROR_IO);
     return UVC_ERROR_IO;
@@ -965,9 +1076,7 @@ uvc_error_t uvc_scan_control(uvc_device_t *dev, uvc_device_info_t *info) {
   ret = UVC_SUCCESS;
   if_desc = NULL;
 
-  //Start looking for the control interface at the given camera number
-
-  for (interface_idx = info->camera_number*2; interface_idx < info->config->bNumInterfaces; ++interface_idx) {
+  for (interface_idx = 0; interface_idx < info->config->bNumInterfaces; ++interface_idx) {
     if_desc = &info->config->interface[interface_idx].altsetting[0];
 
     if (if_desc->bInterfaceClass == 14 && if_desc->bInterfaceSubClass == 1) // Video, Control
@@ -1563,7 +1672,6 @@ void uvc_close(uvc_device_handle_t *devh) {
   if (ctx->own_usb_ctx && ctx->open_devices == devh && devh->next == NULL) {
     ctx->kill_handler_thread = 1;
     libusb_close(devh->usb_devh);
-
     pthread_join(ctx->handler_thread, NULL);
   } else {
     libusb_close(devh->usb_devh);

@@ -36,8 +36,8 @@
  * @brief Interpretation of devices, error codes and negotiated stream parameters
  */
 
-#include "libuvc.h"
-#include "libuvc_internal.h"
+#include "libuvc/libuvc.h"
+#include "libuvc/libuvc_internal.h"
 
 /** @internal */
 typedef struct _uvc_error_msg {
@@ -228,8 +228,8 @@ void uvc_print_diag(uvc_device_handle_t *devh, FILE *stream) {
                      ++interval_ptr) {
                   fprintf(stream,
                       "\t\t\t  interval[%d]: 1/%d\n",
-              (int) (interval_ptr - frame_desc->intervals),
-              10000000 / *interval_ptr);
+		      (int) (interval_ptr - frame_desc->intervals),
+		      10000000 / *interval_ptr);
                 }
               } else {
                 fprintf(stream,

@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
           #endif
           sleep(10);
           uvc_stop_streaming(devh);
-	  puts("Done streaming.");
+    puts("Done streaming.");
         }
       }
 
