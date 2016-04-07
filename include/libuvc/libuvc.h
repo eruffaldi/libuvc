@@ -347,6 +347,13 @@ typedef struct uvc_processing_unit {
   uint64_t bmControls;
 } uvc_processing_unit_t;
 
+/** Represents selector unit to connect other units */
+typedef struct uvc_selector_unit {
+  struct uvc_selector_unit *prev, *next;
+  /** Index of the selector unit within the device */
+  uint8_t bUnitID;
+} uvc_selector_unit_t;
+
 /** Custom processing or camera-control functions */
 typedef struct uvc_extension_unit {
   struct uvc_extension_unit *prev, *next;
@@ -379,6 +386,13 @@ typedef void(uvc_status_callback_t)(enum uvc_status_class status_class,
                                     int selector,
                                     enum uvc_status_attribute status_attribute,
                                     void *data, size_t data_len,
+                                    void *user_ptr);
+
+/** A callback function to accept button events
+ * @ingroup device
+ */
+typedef void(uvc_button_callback_t)(int button,
+                                    int state,
                                     void *user_ptr);
 
 /** Structure representing a UVC device descriptor.
@@ -482,6 +496,11 @@ uvc_error_t uvc_find_device(
     uvc_device_t **dev,
     int vid, int pid, const char *sn);
 
+uvc_error_t uvc_find_devices(
+    uvc_context_t *ctx,
+    uvc_device_t ***devs,
+    int vid, int pid, const char *sn);
+
 uvc_error_t uvc_open(
     uvc_device_t *dev,
     uvc_device_handle_t **devh);
@@ -503,8 +522,14 @@ void uvc_set_status_callback(uvc_device_handle_t *devh,
                              uvc_status_callback_t cb,
                              void *user_ptr);
 
+void uvc_set_button_callback(uvc_device_handle_t *devh,
+                             uvc_button_callback_t cb,
+                             void *user_ptr);
+
+const uvc_input_terminal_t *uvc_get_camera_terminal(uvc_device_handle_t *devh);
 const uvc_input_terminal_t *uvc_get_input_terminals(uvc_device_handle_t *devh);
 const uvc_output_terminal_t *uvc_get_output_terminals(uvc_device_handle_t *devh);
+const uvc_selector_unit_t *uvc_get_selector_units(uvc_device_handle_t *devh);
 const uvc_processing_unit_t *uvc_get_processing_units(uvc_device_handle_t *devh);
 const uvc_extension_unit_t *uvc_get_extension_units(uvc_device_handle_t *devh);
 
@@ -700,6 +725,9 @@ uvc_error_t uvc_any2rgb(uvc_frame_t *in, uvc_frame_t *out);
 uvc_error_t uvc_yuyv2bgr(uvc_frame_t *in, uvc_frame_t *out);
 uvc_error_t uvc_uyvy2bgr(uvc_frame_t *in, uvc_frame_t *out);
 uvc_error_t uvc_any2bgr(uvc_frame_t *in, uvc_frame_t *out);
+
+uvc_error_t uvc_yuyv2y(uvc_frame_t *in, uvc_frame_t *out);
+uvc_error_t uvc_yuyv2uv(uvc_frame_t *in, uvc_frame_t *out);
 
 #ifdef LIBUVC_HAS_JPEG
 uvc_error_t uvc_mjpeg2rgb(uvc_frame_t *in, uvc_frame_t *out);

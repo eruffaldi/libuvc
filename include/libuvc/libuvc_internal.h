@@ -178,9 +178,11 @@ typedef struct uvc_control_interface {
   struct uvc_device_info *parent;
   struct uvc_input_terminal *input_term_descs;
   // struct uvc_output_terminal *output_term_descs;
+  struct uvc_selector_unit *selector_unit_descs;
   struct uvc_processing_unit *processing_unit_descs;
   struct uvc_extension_unit *extension_unit_descs;
   uint16_t bcdUVC;
+  uint32_t dwClockFrequency;
   uint8_t bEndpointAddress;
   /** Interface number */
   uint8_t bInterfaceNumber;
@@ -228,7 +230,7 @@ struct uvc_stream_handle {
   /** Current control block */
   struct uvc_stream_ctrl cur_ctrl;
 
-  /* listeners may only access hold*, and only when holding a 
+  /* listeners may only access hold*, and only when holding a
    * lock on cb_mutex (probably signaled with cb_cond) */
   uint8_t fid;
   uint32_t seq, hold_seq;
@@ -263,6 +265,9 @@ struct uvc_device_handle {
   /** Function to call when we receive status updates from the camera */
   uvc_status_callback_t *status_cb;
   void *status_user_ptr;
+  /** Function to call when we receive button events from the camera */
+  uvc_button_callback_t *button_cb;
+  void *button_user_ptr;
 
   uvc_stream_handle_t *streams;
   /** Whether the camera is an iSight that sends one header per frame */
@@ -278,7 +283,7 @@ struct uvc_context {
   /** List of open devices in this context */
   uvc_device_handle_t *open_devices;
   pthread_t handler_thread;
-  uint8_t kill_handler_thread;
+  int kill_handler_thread;
 };
 
 uvc_error_t uvc_query_stream_ctrl(
