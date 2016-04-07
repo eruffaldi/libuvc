@@ -1,0 +1,1 @@
+convert -size 640x480 -depth 8 rgb:$1 $1.jpg
