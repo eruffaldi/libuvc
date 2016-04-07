@@ -75,8 +75,8 @@ YUV stream from a UVC device such as a standard webcam.
  * @defgroup init Library initialization/deinitialization
  * @brief Setup routines used to construct UVC access contexts
  */
-#include "libuvc/libuvc.h"
-#include "libuvc/libuvc_internal.h"
+#include "libuvc.h"
+#include "libuvc_internal.h"
 
 /** @internal
  * @brief Event handler thread
@@ -87,7 +87,11 @@ void *_uvc_handle_events(void *arg) {
   uvc_context_t *ctx = (uvc_context_t *) arg;
 
   while (!ctx->kill_handler_thread)
-    libusb_handle_events_completed(ctx->usb_ctx, &ctx->kill_handler_thread);
+  {
+      if (ctx->usb_ctx) libusb_handle_events(ctx->usb_ctx);
+      else break;
+  }
+
   return NULL;
 }
 

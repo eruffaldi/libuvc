@@ -36,8 +36,8 @@
  * @brief Interpretation of devices, error codes and negotiated stream parameters
  */
 
-#include "libuvc/libuvc.h"
-#include "libuvc/libuvc_internal.h"
+#include "libuvc.h"
+#include "libuvc_internal.h"
 
 /** @internal */
 typedef struct _uvc_error_msg {
@@ -165,22 +165,16 @@ void uvc_print_diag(uvc_device_handle_t *devh, FILE *stream) {
 
     DL_FOREACH(devh->info->stream_ifs, stream_if) {
       uvc_format_desc_t *fmt_desc;
-      const struct libusb_interface *interface;
-      int interface_id;
-
-      interface_id = stream_if->bInterfaceNumber;
-      interface = &devh->info->config->interface[interface_id];
 
       ++stream_idx;
 
       fprintf(stream, "VideoStreaming(%d):\n"
-          "\tbEndpointAddress: %d\n\tNumAltSettings: %d\n\tFormats:\n",
-          stream_idx, stream_if->bEndpointAddress,interface->num_altsetting);
+          "\tbEndpointAddress: %d\n\tFormats:\n",
+          stream_idx, stream_if->bEndpointAddress);
 
       DL_FOREACH(stream_if->format_descs, fmt_desc) {
         uvc_frame_desc_t *frame_desc;
         int i;
-
 
         switch (fmt_desc->bDescriptorSubtype) {
           case UVC_VS_FORMAT_UNCOMPRESSED:
@@ -189,13 +183,10 @@ void uvc_print_diag(uvc_device_handle_t *devh, FILE *stream) {
             fprintf(stream,
                 "\t\%s(%d)\n"
                 "\t\t  bits per pixel: %d\n"
-                "\t\t  bEndpointAddress: %d\n"
                 "\t\t  GUID: ",
                 _uvc_name_for_format_subtype(fmt_desc->bDescriptorSubtype),
                 fmt_desc->bFormatIndex,
-                fmt_desc->bBitsPerPixel,
-               (int) fmt_desc->parent->bEndpointAddress
-                );
+                fmt_desc->bBitsPerPixel);
 
             for (i = 0; i < 16; ++i)
               fprintf(stream, "%02x", fmt_desc->guidFormat[i]);
@@ -237,8 +228,8 @@ void uvc_print_diag(uvc_device_handle_t *devh, FILE *stream) {
                      ++interval_ptr) {
                   fprintf(stream,
                       "\t\t\t  interval[%d]: 1/%d\n",
-		      (int) (interval_ptr - frame_desc->intervals),
-		      10000000 / *interval_ptr);
+              (int) (interval_ptr - frame_desc->intervals),
+              10000000 / *interval_ptr);
                 }
               } else {
                 fprintf(stream,
@@ -260,29 +251,6 @@ void uvc_print_diag(uvc_device_handle_t *devh, FILE *stream) {
             fprintf(stream, "\t-UnknownFormat (%d)\n",
                 fmt_desc->bDescriptorSubtype );
         }
-
-        for (int alt_idx = 0; alt_idx < interface->num_altsetting; alt_idx++) {
-          int ep_idx;
-              const struct libusb_interface_descriptor *altsetting;
-
-          altsetting = interface->altsetting + alt_idx;
-          
-          /* Find the endpoint with the number specified in the VS header */
-          for (ep_idx = 0; ep_idx < altsetting->bNumEndpoints; ep_idx++) {
-                const struct libusb_endpoint_descriptor *endpoint;
-
-            endpoint = altsetting->endpoint + ep_idx;
-
-              //if (endpoint->bEndpointAddress == format_desc->parent->bEndpointAddress) {
-              // wMaxPacketSize: [unused:2 (multiplier-1):3 size:11]
-              int endpoint_bytes_per_packet = endpoint->wMaxPacketSize;
-              endpoint_bytes_per_packet = (endpoint_bytes_per_packet & 0x07ff) *
-                                          (((endpoint_bytes_per_packet >> 11) & 3) + 1);
-              fprintf(stream,"Alt %d EP %d EPa %d PacketSize %d\n\t",alt_idx,ep_idx,endpoint->bEndpointAddress,endpoint->wMaxPacketSize);
-          }
-        }
-
-
       }
     }
 

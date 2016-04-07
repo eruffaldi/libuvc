@@ -85,6 +85,11 @@ target_link_libraries(example uvc ${LIBUSB_LIBRARY_NAMES} opencv_highgui
   opencv_core	
   pthread)
 
+add_executable(examplezed src/examplezed.c)
+target_link_libraries(examplezed uvc ${LIBUSB_LIBRARY_NAMES} opencv_highgui
+  opencv_imgproc
+  opencv_core 
+  pthread)
 
 add_executable(examplers src/examplers.c)
 target_link_libraries(examplers uvc ${LIBUSB_LIBRARY_NAMES} opencv_highgui
